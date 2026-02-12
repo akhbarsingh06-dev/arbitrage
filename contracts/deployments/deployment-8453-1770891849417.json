@@ -1,0 +1,23 @@
+{
+  "tag": "base-mainnet-resume",
+  "chainId": 8453,
+  "network": "base",
+  "timestamp": "2026-02-12T10:24:09.416Z",
+  "contracts": {
+    "treasury": "0x595523Ae74E4fe4416FA93CfAe23264E1BBAc3CD",
+    "riskManager": "0x64f79D3E69fddfb66d0Dba897ec1c9B9a293cA6A",
+    "arbitrageRouter": "0x5fD7d5AC7f0cE8E33d96c64c2b5A9458ecEe9d39",
+    "flashLoanExecutor": "0xaed3C6Be308c851Aff9b1Ba9Fa425Cc3d1051156",
+    "uniswapV3Adapter": "0x2a3BF572B4684a557b62f6982c2c5291cF6B5945",
+    "aerodromeAdapter": "0xc7450d9f9Fabfb62d53De94Fc49759839bF87eF3"
+  },
+  "external": {
+    "aavePool": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
+    "uniswapV3Router": "0x2626664c2603336E57B271c5C0b26F421741e481",
+    "uniswapV3Quoter": "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a",
+    "aerodromeRouter": "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43"
+  },
+  "relayer": {
+    "address": "0x87Ce41f822A121e97c1b741332d4354F918734ce"
+  }
+}

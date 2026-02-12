@@ -1,0 +1,34 @@
+{
+    "name": "base-arb-frontend",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
+        "predev": "node ../scripts/check-node-version.js",
+        "prebuild": "node ../scripts/check-node-version.js",
+        "prestart": "node ../scripts/check-node-version.js",
+        "dev": "node scripts/dev-wrapper.js",
+        "build": "next build",
+        "start": "next start",
+        "lint": "next lint"
+    },
+    "dependencies": {
+        "@rainbow-me/rainbowkit": "^2.1.0",
+        "@tanstack/react-query": "^5.28.0",
+        "next": "^14.2.0",
+        "pino-pretty": "^13.1.1",
+        "react": "^18.3.0",
+        "react-dom": "^18.3.0",
+        "viem": "^2.18.0",
+        "wagmi": "^2.12.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "@types/react": "^18.3.0",
+        "@types/react-dom": "^18.3.0",
+        "autoprefixer": "^10.4.20",
+        "postcss": "^8.5.3",
+        "tailwindcss": "^3.4.17",
+        "typescript": "^5.3.0"
+    }
+}

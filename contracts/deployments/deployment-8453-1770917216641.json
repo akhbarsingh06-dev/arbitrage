@@ -1,0 +1,28 @@
+{
+  "tag": "",
+  "chainId": 8453,
+  "network": "base",
+  "timestamp": "2026-02-12T17:26:56.640Z",
+  "contracts": {
+    "treasury": "0x0A199B211Da6892EffDAD353a67f7f1e442d8472",
+    "riskManager": "0x1CB705F8B71fd349220408D9A0DD10C29c04Eb3B",
+    "arbitrageRouter": "0xCa69f30135c86eB6C3F979b37774E49DB637bd8b",
+    "flashLoanExecutor": "0x6973EfD2C896CDeD802587bFceDcc42Fa7eB0C43",
+    "uniswapV3Adapter": "0xcF41bc47b8b29e573b27e264520e88387FDd0212",
+    "pancakeV3Adapter": "0x99f358BC637e5e42CD41AfE441dC72a56641801D",
+    "aerodromeAdapter": "0x7c5224ee6F36962D088e726dcD2608a6989e4d59"
+  },
+  "external": {
+    "aavePool": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
+    "uniswapV3Router": "0x2626664c2603336E57B271c5C0b26F421741e481",
+    "uniswapV3Quoter": "0x222ca98f00ed15b1fae10b61c277703a194cf5d2",
+    "pancakeswapV3Router": "0x1b81D678ffb9C0263b24A97847620C99d213eB14",
+    "pancakeswapV3Quoter": "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997",
+    "aerodromeRouter": "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43"
+  },
+  "txManager": {
+    "nextNonce": 32,
+    "maxFeePerGas": "29420137",
+    "maxPriorityFeePerGas": "1250000"
+  }
+}

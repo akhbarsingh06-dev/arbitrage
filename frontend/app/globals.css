@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 20% 0%, rgba(110, 231, 255, 0.12), transparent 60%),
+    radial-gradient(900px 500px at 90% 20%, rgba(167, 139, 250, 0.10), transparent 55%),
+    theme('colors.bg');
+}
+
+@layer base {
+  a {
+    @apply text-inherit no-underline;
+  }
+
+  code {
+    @apply font-mono text-[0.95em];
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-border bg-white/5 shadow-sm backdrop-blur;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-white/5 px-3 py-2 text-sm font-medium text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply border-[rgba(110,231,255,0.35)] bg-[rgba(110,231,255,0.10)] hover:bg-[rgba(110,231,255,0.14)];
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-2 rounded-full border border-border bg-white/5 px-3 py-1 text-xs text-slate-200;
+  }
+}

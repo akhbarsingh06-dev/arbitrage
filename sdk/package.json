@@ -1,0 +1,19 @@
+{
+  "name": "base-arb-sdk",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "viem": "^2.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}
+
