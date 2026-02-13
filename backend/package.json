@@ -4,14 +4,12 @@
     "description": "Backend scanner and relayer for Base Arbitrage Protocol",
     "main": "dist/server.js",
     "scripts": {
-        "predev": "node ../scripts/check-node-version.js",
-        "prebuild": "node ../scripts/check-node-version.js",
-        "prestart": "node ../scripts/check-node-version.js",
         "dev": "ts-node src/server.ts",
         "build": "tsc",
         "start": "node dist/server.js"
     },
     "dependencies": {
+        "axios": "^1.13.5",
         "cors": "^2.8.5",
         "dotenv": "^16.4.0",
         "ethers": "^6.13.0",

@@ -4,9 +4,6 @@
     "private": true,
     "scripts": {
         "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
-        "predev": "node ../scripts/check-node-version.js",
-        "prebuild": "node ../scripts/check-node-version.js",
-        "prestart": "node ../scripts/check-node-version.js",
         "dev": "node scripts/dev-wrapper.js",
         "build": "next build",
         "start": "next start",

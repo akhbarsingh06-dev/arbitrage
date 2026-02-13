@@ -9,6 +9,8 @@ import type { AnalyticsResponse, HealthResponse, OpportunityResponse, Simulation
 import { Card, CardHeader, Stat, Table, Td, Th } from "@/components/ui";
 import { formatNumber, shortHex } from "@/lib/format";
 
+import { MarketSpreads } from "@/components/MarketSpreads";
+
 function TopOpportunities({ opportunities }: { opportunities: SimulationResult[] }) {
   return (
     <Card>
@@ -135,6 +137,8 @@ export default function DashboardPage() {
           helper="Treasury performance fees"
         />
       </div>
+
+      <MarketSpreads />
 
       <TopOpportunities opportunities={opps} />
     </div>

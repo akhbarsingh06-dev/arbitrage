@@ -9,6 +9,7 @@ import { PriceCalculator } from "./priceCalculator";
 import { Simulator, SimulationResult } from "./simulator";
 import { Relayer } from "./relayer";
 import { createLogger } from "./logger";
+import { DiscoveryService } from "./discovery";
 import { RouteVerifier } from "./routeVerifier";
 import { callWithFallback } from "./providers";
 
@@ -37,6 +38,9 @@ const poolMonitor = new PoolMonitor();
 const simulator = new Simulator();
 const relayer = new Relayer();
 const routeVerifier = new RouteVerifier();
+const discoveryService = new DiscoveryService((pair) => {
+    poolMonitor.addPair(pair).catch(err => log.warn("Discovery failed to add pair", { pair: pair.name, err: String(err) }));
+});
 const log = createLogger("API");
 
 const QUOTER_ABI = [
@@ -152,8 +156,8 @@ poolMonitor.on("priceUpdate", async (update: PriceUpdate) => {
         // Simulate top opportunities
         const simulations: SimulationResult[] = [];
         for (const spread of spreads.slice(0, 3)) {
-            // Test with different input sizes
-            const amounts = [500, 2_000, 10_000, 50_000];
+            // Test with different input sizes (smaller amounts needed for WETH/high-value pairs)
+            const amounts = [0.1, 1, 10, 50, 100, 500, 2_000, 10_000];
             for (const amount of amounts) {
                 const sim = await simulator.simulate(spread, amount);
                 if (sim && sim.netProfitable) {
@@ -207,6 +211,13 @@ app.get("/api/health", (req, res) => {
         missingEnv: execConfig.ok ? [] : execConfig.missing,
         optionalMissingEnv: execConfig.optionalMissing,
     });
+});
+
+// Get list of monitored pairs (including discovered ones)
+app.get("/api/pairs", (req, res) => {
+    const staticPairs = config.pairs.map(p => ({ name: p.name, source: "static" }));
+    const discoveredPairs = discoveryService.getDiscoveredPairs().map(p => ({ name: p.name, source: "dynamic" }));
+    res.json({ pairs: [...staticPairs, ...discoveredPairs] });
 });
 
 // Get current opportunities
@@ -443,7 +454,7 @@ app.post("/api/intent/submit", async (req, res) => {
         if (
             String(normalizedSteps[0].tokenIn).toLowerCase() !== String(intent.asset).toLowerCase() ||
             String(normalizedSteps[normalizedSteps.length - 1].tokenOut).toLowerCase() !==
-                String(intent.asset).toLowerCase()
+            String(intent.asset).toLowerCase()
         ) {
             return res.status(400).json({ error: "Route must start/end in borrowed asset" });
         }
@@ -678,6 +689,11 @@ async function main() {
     // Start pool monitoring (async, so API is available immediately even if RPCs are flaky).
     poolMonitor.start().catch((err) => {
         log.error("PoolMonitor failed to start", { err: String(err) });
+    });
+
+    // Start pair discovery
+    discoveryService.start().catch((err) => {
+        log.error("DiscoveryService failed to start", { err: String(err) });
     });
 }
 

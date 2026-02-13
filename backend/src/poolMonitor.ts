@@ -4,10 +4,6 @@ import { EventEmitter } from "events";
 import { createLogger } from "./logger";
 import { callWithFallback, createRpcProvider, createWsProvider, getWsUrls } from "./providers";
 
-// ═══════════════════════════════════════════════
-//  Pool Monitor — Listens for Swap events on DEX pools
-// ═══════════════════════════════════════════════
-
 // Uniswap V3 Pool ABI (minimal)
 const V3_POOL_ABI = [
     "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
@@ -45,16 +41,13 @@ export interface PoolState {
     pair: string;
     token0: string;
     token1: string;
-    // Uniswap V3 specific
     sqrtPriceX96?: bigint;
     tick?: number;
     liquidity?: bigint;
     fee?: number;
-    // Aerodrome specific
     reserve0?: bigint;
     reserve1?: bigint;
     stable?: boolean;
-    // Common
     lastUpdated: number;
 }
 
@@ -102,52 +95,28 @@ export class PoolMonitor extends EventEmitter {
     async start(): Promise<void> {
         if (this.isRunning) return;
         this.isRunning = true;
-
         this.log.info("Starting pool monitoring...");
-
-        // Initialize all pool states
         await this.initializePools();
 
-        // Try WebSocket for real-time events
         const wsUrls = getWsUrls();
         if (wsUrls.length > 0) {
             try {
                 this.wsProvider = createWsProvider(wsUrls[0]);
                 await this.setupEventListeners();
                 this.log.info("WebSocket listeners active", { wsUrl: wsUrls[0] });
-
-                const ws: any = (this.wsProvider as any).websocket;
-                const onClose = () => {
-                    if (!this.isRunning) return;
-                    this.log.warn("WebSocket closed; falling back to polling");
-                    try {
-                        this.wsProvider?.destroy();
-                    } catch {
-                        // ignore
-                    }
-                    this.wsProvider = undefined;
-                    this.startPolling();
-                };
-                if (ws?.addEventListener) ws.addEventListener("close", onClose);
-                else if (ws?.on) ws.on("close", onClose);
             } catch (err) {
                 this.log.warn("WebSocket failed; falling back to polling");
                 this.startPolling();
             }
         } else {
-            // Fall back to polling
             this.startPolling();
         }
     }
 
     stop(): void {
         this.isRunning = false;
-        if (this.pollingInterval) {
-            clearInterval(this.pollingInterval);
-        }
-        if (this.wsProvider) {
-            this.wsProvider.destroy();
-        }
+        if (this.pollingInterval) clearInterval(this.pollingInterval);
+        if (this.wsProvider) this.wsProvider.destroy();
         this.log.info("Stopped");
     }
 
@@ -159,295 +128,133 @@ export class PoolMonitor extends EventEmitter {
         return Array.from(this.poolStates.values()).filter((p) => p.pair === pairName);
     }
 
+    async addPair(pair: PairConfig): Promise<void> {
+        this.log.info("Adding new pair dynamically", { pair: pair.name });
+        await this.initializeSinglePair(pair);
+        if (this.wsProvider) {
+            const pools = this.getPoolsByPair(pair.name);
+            for (const state of pools) {
+                await this.setupPoolListener(state);
+            }
+        }
+    }
+
     private async initializePools(): Promise<void> {
         for (const pair of config.pairs) {
-            // Initialize V3 pools (Uniswap V3 + PancakeSwap V3)
-            for (const pool of pair.v3Pools || []) {
-                try {
-                    const dex = pool.dex ?? "uniswapV3";
-                    const address = await this.resolveV3PoolAddress(dex, pair.token0, pair.token1, pool.fee, pool.address);
-                    if (!address) continue;
-                    try {
-                        const state = await this.fetchV3State(dex, address, pair.name, pool.fee, pair.token0, pair.token1);
-                        this.poolStates.set(address, state);
-                        this.log.info("Initialized V3 pool", { pair: pair.name, dex, fee: pool.fee, address });
-                    } catch (err) {
-                        // Keep a placeholder so polling can retry later (RPC flakiness should not drop pools).
-                        this.poolStates.set(address, {
-                            address,
-                            dex,
-                            pair: pair.name,
-                            token0: pair.token0,
-                            token1: pair.token1,
-                            fee: pool.fee,
-                            lastUpdated: 0,
-                        });
-                        this.log.warn("Failed to init V3 pool", { pair: pair.name, dex, fee: pool.fee, address, err: String(err) });
-                    }
-                } catch (err) {
-                    this.log.warn("Failed to init V3 pool", { pair: pair.name, fee: pool.fee, err: String(err) });
-                }
-            }
+            await this.initializeSinglePair(pair);
+        }
+    }
 
-            // Initialize Aerodrome pools
-            for (const pool of pair.aerodromePools) {
+    private async initializeSinglePair(pair: PairConfig): Promise<void> {
+        // V3 Pools
+        for (const pool of pair.v3Pools || []) {
+            try {
+                const dex = pool.dex ?? "uniswapV3";
+                const address = await this.resolveV3PoolAddress(dex, pair.token0, pair.token1, pool.fee, pool.address);
+                if (!address) continue;
                 try {
-                    const address = await this.resolveAeroPoolAddress(pair.token0, pair.token1, pool.stable, pool.address);
-                    if (!address) continue;
-                    try {
-                        const state = await this.fetchAeroState(address, pair.name, pool.stable, pair.token0, pair.token1);
-                        this.poolStates.set(address, state);
-                        this.log.info("Initialized Aerodrome pool", { pair: pair.name, address });
-                    } catch (err) {
-                        this.poolStates.set(address, {
-                            address,
-                            dex: "aerodrome",
-                            pair: pair.name,
-                            token0: pair.token0,
-                            token1: pair.token1,
-                            stable: pool.stable,
-                            lastUpdated: 0,
-                        });
-                        this.log.warn("Failed to init Aero pool", { pair: pair.name, stable: pool.stable, address, err: String(err) });
-                    }
-                } catch (err) {
-                    this.log.warn("Failed to init Aero pool", { pair: pair.name, stable: pool.stable, err: String(err) });
+                    const state = await this.fetchV3State(dex, address, pair.name, pool.fee, pair.token0, pair.token1);
+                    this.poolStates.set(address, state);
+                } catch {
+                    this.poolStates.set(address, { address, dex, pair: pair.name, token0: pair.token0, token1: pair.token1, fee: pool.fee, lastUpdated: 0 });
                 }
+            } catch (err) {
+                this.log.warn("Failed to init V3 pool", { pair: pair.name, fee: pool.fee, err: String(err) });
+            }
+        }
+
+        // Aero Pools
+        for (const pool of pair.aerodromePools || []) {
+            try {
+                const address = await this.resolveAeroPoolAddress(pair.token0, pair.token1, pool.stable, pool.address);
+                if (!address) continue;
+                try {
+                    const state = await this.fetchAeroState(address, pair.name, pool.stable, pair.token0, pair.token1);
+                    this.poolStates.set(address, state);
+                } catch {
+                    this.poolStates.set(address, { address, dex: "aerodrome", pair: pair.name, token0: pair.token0, token1: pair.token1, stable: pool.stable, lastUpdated: 0 });
+                }
+            } catch (err) {
+                this.log.warn("Failed to init Aero pool", { pair: pair.name, stable: pool.stable, err: String(err) });
             }
         }
     }
 
-    private isV3Dex(dex: PoolState["dex"]): dex is "uniswapV3" | "pancakeV3" {
-        return dex === "uniswapV3" || dex === "pancakeV3";
-    }
-
-    private getV3Factory(dex: "uniswapV3" | "pancakeV3"): ethers.Contract {
-        return dex === "uniswapV3" ? this.uniV3Factory : this.pancakeV3Factory;
-    }
-
-    private async resolveV3PoolAddress(
-        dex: "uniswapV3" | "pancakeV3",
-        token0: string,
-        token1: string,
-        fee: number,
-        configured?: string
-    ): Promise<string | null> {
-        if (configured && ethers.isAddress(configured) && configured !== ethers.ZeroAddress) return configured;
+    private async resolveV3PoolAddress(dex: "uniswapV3" | "pancakeV3", t0: string, t1: string, fee: number, cfg?: string): Promise<string | null> {
+        if (cfg && ethers.isAddress(cfg) && cfg !== ethers.ZeroAddress) return cfg;
         try {
-            const factory = this.getV3Factory(dex);
-            const addr = await this.withRetry(`${dex}.factory.getPool`, () =>
-                callWithFallback<string>((p) => (((factory.connect(p) as any) as any)).getPool(token0, token1, fee))
-            );
-            if (!ethers.isAddress(addr) || addr === ethers.ZeroAddress) {
-                this.log.warn("V3 pool not found in factory", { dex, token0, token1, fee });
-                return null;
-            }
-            return addr;
-        } catch (err) {
-            this.log.warn("V3 factory getPool failed", { dex, token0, token1, fee, err: String(err) });
-            return null;
-        }
+            const factory = dex === "uniswapV3" ? this.uniV3Factory : this.pancakeV3Factory;
+            const addr = await this.withRetry(`${dex}.factory`, () => callWithFallback<string>((p) => (factory.connect(p) as any).getPool(t0, t1, fee)));
+            return (addr && addr !== ethers.ZeroAddress) ? addr : null;
+        } catch { return null; }
     }
 
-    private async resolveAeroPoolAddress(
-        token0: string,
-        token1: string,
-        stable: boolean,
-        configured?: string
-    ): Promise<string | null> {
-        if (configured && ethers.isAddress(configured) && configured !== ethers.ZeroAddress) return configured;
+    private async resolveAeroPoolAddress(t0: string, t1: string, stable: boolean, cfg?: string): Promise<string | null> {
+        if (cfg && ethers.isAddress(cfg) && cfg !== ethers.ZeroAddress) return cfg;
         try {
             if (!this.aeroFactory) {
-                const factoryAddr = await this.withRetry("aeroRouter.defaultFactory", () =>
-                    callWithFallback<string>((p) => ((this.aeroRouter.connect(p) as any) as any).defaultFactory())
-                );
-                this.aeroFactory = new ethers.Contract(factoryAddr, AERO_FACTORY_ABI, this.provider);
+                const addr = await this.withRetry("aeroRouter.defaultFactory", () => callWithFallback<string>((p) => (this.aeroRouter.connect(p) as any).defaultFactory()));
+                this.aeroFactory = new ethers.Contract(addr, AERO_FACTORY_ABI, this.provider);
             }
-            try {
-                const addr = await this.withRetry("aeroFactory.getPool", () =>
-                    callWithFallback<string>((p) => (((this.aeroFactory!.connect(p) as any) as any)).getPool(token0, token1, stable))
-                );
-                if (ethers.isAddress(addr) && addr !== ethers.ZeroAddress) return addr;
-            } catch {
-                // ignore; try getPair below
-            }
-            const addr2 = await this.withRetry("aeroFactory.getPair", () =>
-                callWithFallback<string>((p) => (((this.aeroFactory!.connect(p) as any) as any)).getPair(token0, token1, stable))
-            );
-            if (!ethers.isAddress(addr2) || addr2 === ethers.ZeroAddress) {
-                this.log.warn("Aerodrome pool not found in factory", { token0, token1, stable });
-                return null;
-            }
-            return addr2;
-        } catch (err) {
-            this.log.warn("Aerodrome factory lookup failed", { token0, token1, stable, err: String(err) });
-            return null;
-        }
+            const addr = await this.withRetry("aeroFactory.getPool", () => callWithFallback<string>((p) => (this.aeroFactory!.connect(p) as any).getPool(t0, t1, stable)));
+            return (addr && addr !== ethers.ZeroAddress) ? addr : null;
+        } catch { return null; }
     }
 
-    private async fetchV3State(
-        dex: "uniswapV3" | "pancakeV3",
-        address: string,
-        pairName: string,
-        fee: number,
-        token0: string,
-        token1: string
-    ): Promise<PoolState> {
-        const pool = new ethers.Contract(address, V3_POOL_ABI, this.provider) as any;
-        const [slot0, liquidity] = await callWithFallback<any>((p) =>
-            Promise.all([pool.connect(p).slot0(), pool.connect(p).liquidity()])
-        );
-
-        const minLiquidity = config.poolFilters?.minUniV3Liquidity ?? BigInt(0);
-        if (minLiquidity > BigInt(0) && BigInt(liquidity) < minLiquidity) {
-            throw new Error(`UniV3 liquidity below threshold`);
-        }
-
-        return {
-            address,
-            dex,
-            pair: pairName,
-            token0,
-            token1,
-            sqrtPriceX96: slot0.sqrtPriceX96,
-            tick: slot0.tick,
-            liquidity,
-            fee,
-            lastUpdated: Date.now(),
-        };
+    private async fetchV3State(dex: "uniswapV3" | "pancakeV3", address: string, pair: string, fee: number, t0: string, t1: string): Promise<PoolState> {
+        const pool = new ethers.Contract(address, V3_POOL_ABI, this.provider);
+        const [slot0, liquidity] = await callWithFallback<any>((p) => Promise.all([
+            (pool.connect(p) as any).slot0(),
+            (pool.connect(p) as any).liquidity()
+        ]));
+        return { address, dex, pair, token0: t0, token1: t1, sqrtPriceX96: slot0.sqrtPriceX96, tick: slot0.tick, liquidity, fee, lastUpdated: Date.now() };
     }
 
-    private async fetchAeroState(
-        address: string,
-        pairName: string,
-        stable: boolean,
-        token0: string,
-        token1: string
-    ): Promise<PoolState> {
-        const pool = new ethers.Contract(address, AERO_POOL_ABI, this.provider) as any;
-        const reserves: any = await callWithFallback<any>((p) => pool.connect(p).getReserves());
-
-        const minReserveBySymbol = config.poolFilters?.minReserveBySymbol ?? {};
-        const token0Cfg = Object.values(config.tokens).find(
-            (t) => t.address.toLowerCase() === String(token0).toLowerCase()
-        );
-        const token1Cfg = Object.values(config.tokens).find(
-            (t) => t.address.toLowerCase() === String(token1).toLowerCase()
-        );
-
-        if (token0Cfg?.symbol && minReserveBySymbol[token0Cfg.symbol]) {
-            const min0 = ethers.parseUnits(minReserveBySymbol[token0Cfg.symbol], token0Cfg.decimals);
-            if (BigInt(reserves._reserve0) < min0) throw new Error("Aero reserve0 below threshold");
-        }
-        if (token1Cfg?.symbol && minReserveBySymbol[token1Cfg.symbol]) {
-            const min1 = ethers.parseUnits(minReserveBySymbol[token1Cfg.symbol], token1Cfg.decimals);
-            if (BigInt(reserves._reserve1) < min1) throw new Error("Aero reserve1 below threshold");
-        }
-
-        return {
-            address,
-            dex: "aerodrome",
-            pair: pairName,
-            token0,
-            token1,
-            reserve0: reserves._reserve0,
-            reserve1: reserves._reserve1,
-            stable,
-            lastUpdated: Date.now(),
-        };
+    private async fetchAeroState(address: string, pair: string, stable: boolean, t0: string, t1: string): Promise<PoolState> {
+        const pool = new ethers.Contract(address, AERO_POOL_ABI, this.provider);
+        const res: any = await callWithFallback<any>((p) => (pool.connect(p) as any).getReserves());
+        return { address, dex: "aerodrome", pair, token0: t0, token1: t1, reserve0: res._reserve0, reserve1: res._reserve1, stable, lastUpdated: Date.now() };
     }
 
-    private async setupEventListeners(): Promise<void> {
+    private async setupEventListeners() {
         if (!this.wsProvider) return;
-
-        // Subscribe only to pools that were successfully initialized (resolved addresses).
         for (const state of Array.from(this.poolStates.values())) {
-            if (this.isV3Dex(state.dex)) {
-                const v3Dex = state.dex;
-                const contract = new ethers.Contract(state.address, V3_POOL_ABI, this.wsProvider);
-                contract.on("Swap", async () => {
-                    try {
-                        const next = await this.fetchV3State(
-                            v3Dex,
-                            state.address,
-                            state.pair,
-                            state.fee ?? 3000,
-                            state.token0,
-                            state.token1
-                        );
-                        this.poolStates.set(state.address, next);
-                        this.emitPriceUpdate(state.pair);
-                    } catch (err) {
-                        this.log.warn("Error updating V3 pool", { address: state.address, dex: v3Dex, err: String(err) });
-                    }
-                });
-            } else {
-                const contract = new ethers.Contract(state.address, AERO_POOL_ABI, this.wsProvider);
-                contract.on("Swap", async () => {
-                    try {
-                        const next = await this.fetchAeroState(
-                            state.address,
-                            state.pair,
-                            !!state.stable,
-                            state.token0,
-                            state.token1
-                        );
-                        this.poolStates.set(state.address, next);
-                        this.emitPriceUpdate(state.pair);
-                    } catch (err) {
-                        this.log.warn("Error updating Aero pool", { address: state.address, err: String(err) });
-                    }
-                });
-            }
+            await this.setupPoolListener(state);
         }
     }
 
-    private startPolling(): void {
-        this.log.info("Polling enabled", { intervalMs: config.scanner.intervalMs });
-        this.pollingInterval = setInterval(async () => {
-            await this.pollAllPools();
-        }, config.scanner.intervalMs);
-    }
-
-    private async pollAllPools(): Promise<void> {
-        const snapshot = Array.from(this.poolStates.values());
-        for (const prev of snapshot) {
+    private async setupPoolListener(state: PoolState) {
+        if (!this.wsProvider) return;
+        const contract = new ethers.Contract(state.address, state.dex === "aerodrome" ? AERO_POOL_ABI : V3_POOL_ABI, this.wsProvider);
+        contract.on("Swap", async () => {
             try {
-                if (this.isV3Dex(prev.dex)) {
-                    const next = await this.fetchV3State(
-                        prev.dex,
-                        prev.address,
-                        prev.pair,
-                        prev.fee ?? 3000,
-                        prev.token0,
-                        prev.token1
-                    );
-                    this.poolStates.set(prev.address, next);
-                    if (prev.sqrtPriceX96 !== next.sqrtPriceX96) this.emitPriceUpdate(prev.pair);
-                } else {
-                    const next = await this.fetchAeroState(
-                        prev.address,
-                        prev.pair,
-                        !!prev.stable,
-                        prev.token0,
-                        prev.token1
-                    );
-                    this.poolStates.set(prev.address, next);
-                    if (prev.reserve0 !== next.reserve0 || prev.reserve1 !== next.reserve1) this.emitPriceUpdate(prev.pair);
-                }
-            } catch {
-                // Continue on polling failures.
-            }
+                const next = state.dex === "aerodrome"
+                    ? await this.fetchAeroState(state.address, state.pair, !!state.stable, state.token0, state.token1)
+                    : await this.fetchV3State(state.dex as any, state.address, state.pair, state.fee!, state.token0, state.token1);
+                this.poolStates.set(state.address, next);
+                this.emitPriceUpdate(state.pair);
+            } catch { }
+        });
+    }
+
+    private startPolling() {
+        this.pollingInterval = setInterval(() => this.pollAllPools(), config.scanner.intervalMs);
+    }
+
+    private async pollAllPools() {
+        for (const prev of Array.from(this.poolStates.values())) {
+            try {
+                const next = prev.dex === "aerodrome"
+                    ? await this.fetchAeroState(prev.address, prev.pair, !!prev.stable, prev.token0, prev.token1)
+                    : await this.fetchV3State(prev.dex as any, prev.address, prev.pair, prev.fee!, prev.token0, prev.token1);
+                this.poolStates.set(prev.address, next);
+                this.emitPriceUpdate(prev.pair);
+            } catch { }
         }
     }
 
-    private emitPriceUpdate(pairName: string): void {
-        const pools = this.getPoolsByPair(pairName);
-        const update: PriceUpdate = {
-            pair: pairName,
-            pools,
-            timestamp: Date.now(),
-        };
-        this.emit("priceUpdate", update);
+    private emitPriceUpdate(pair: string) {
+        const pools = this.getPoolsByPair(pair);
+        this.emit("priceUpdate", { pair, pools, timestamp: Date.now() });
     }
 }

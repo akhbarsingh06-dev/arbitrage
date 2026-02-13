@@ -1,9 +1,8 @@
 import dotenv from "dotenv";
 import path from "path";
 
-// Load env from either repo root (`../.env`) or package root (`.env`), depending on cwd
+// Load env from package root (`.env`)
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
-dotenv.config({ path: path.resolve(process.cwd(), "..", ".env") });
 
 function parseJson<T>(value: string | undefined, fallback: T): T {
     if (!value) return fallback;
@@ -64,6 +63,36 @@ const baseTokens = {
         decimals: 8,
         symbol: "cbBTC",
     },
+    USDT: {
+        // Bridged Tether USD (Base)
+        address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+        decimals: 6,
+        symbol: "USDT",
+    },
+    AERO: {
+        // Aerodrome Finance
+        address: "0x940181a94A35A4569E4529A3CDfB74e38FD98631",
+        decimals: 18,
+        symbol: "AERO",
+    },
+    BRETT: {
+        // Brett (Base)
+        address: "0x532f27101965dd16442e59d40670faf5ebb142e4",
+        decimals: 18,
+        symbol: "BRETT",
+    },
+    DEGEN: {
+        // Degen (Base)
+        address: "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed",
+        decimals: 18,
+        symbol: "DEGEN",
+    },
+    TOSHI: {
+        // Toshi (Base)
+        address: "0xAC1Bd2486aAf3B5C0fc3Fd868558b082a531B2B4",
+        decimals: 18,
+        symbol: "TOSHI",
+    },
 } as const;
 
 const tokens: Record<string, { address: string; decimals: number; symbol: string }> = {
@@ -87,6 +116,90 @@ const basePairs: ExtraPair[] = [
             // PancakeSwap V3 (Base) — additional v3 venue
             { dex: "pancakeV3", fee: 500 },   // 0.05%
             { dex: "pancakeV3", fee: 2500 },  // 0.25% (common on Pancake v3)
+        ],
+        aerodromePools: [
+            { stable: false },
+        ],
+    },
+    {
+        name: "WETH/USDT",
+        token0: baseTokens.WETH.address,
+        token1: baseTokens.USDT.address,
+        v3Pools: [
+            { dex: "uniswapV3", fee: 500 },
+            { dex: "uniswapV3", fee: 3000 },
+        ],
+        aerodromePools: [
+            { stable: false },
+        ],
+    },
+    {
+        name: "USDC/USDT",
+        token0: baseTokens.USDC.address,
+        token1: baseTokens.USDT.address,
+        v3Pools: [
+            { dex: "uniswapV3", fee: 100 },
+            { dex: "uniswapV3", fee: 500 },
+        ],
+        aerodromePools: [
+            { stable: true },
+        ],
+    },
+    {
+        name: "AERO/USDC",
+        token0: baseTokens.AERO.address,
+        token1: baseTokens.USDC.address,
+        v3Pools: [
+            { dex: "uniswapV3", fee: 3000 },
+            { dex: "uniswapV3", fee: 10000 },
+        ],
+        aerodromePools: [
+            { stable: false },
+        ],
+    },
+    {
+        name: "AERO/WETH",
+        token0: baseTokens.AERO.address,
+        token1: baseTokens.WETH.address,
+        v3Pools: [
+            { dex: "uniswapV3", fee: 3000 },
+            { dex: "uniswapV3", fee: 10000 },
+        ],
+        aerodromePools: [
+            { stable: false },
+        ],
+    },
+    {
+        name: "BRETT/WETH",
+        token0: baseTokens.BRETT.address,
+        token1: baseTokens.WETH.address,
+        v3Pools: [
+            { dex: "uniswapV3", fee: 3000 },
+            { dex: "uniswapV3", fee: 10000 },
+        ],
+        aerodromePools: [
+            { stable: false },
+        ],
+    },
+    {
+        name: "DEGEN/WETH",
+        token0: baseTokens.DEGEN.address,
+        token1: baseTokens.WETH.address,
+        v3Pools: [
+            { dex: "uniswapV3", fee: 3000 },
+            { dex: "uniswapV3", fee: 10000 },
+        ],
+        aerodromePools: [
+            { stable: false },
+        ],
+    },
+    {
+        name: "TOSHI/WETH",
+        token0: baseTokens.TOSHI.address,
+        token1: baseTokens.WETH.address,
+        v3Pools: [
+            { dex: "uniswapV3", fee: 3000 },
+            { dex: "uniswapV3", fee: 10000 },
         ],
         aerodromePools: [
             { stable: false },
@@ -244,14 +357,7 @@ export const config = {
     // Pool filters (optional): set to only monitor high-liquidity pools
     poolFilters: {
         minUniV3Liquidity: BigInt(process.env.MIN_UNIV3_LIQUIDITY || "0"),
-        minReserveBySymbol: {
-            USDC: process.env.MIN_RESERVE_USDC || "",
-            WETH: process.env.MIN_RESERVE_WETH || "",
-            cbETH: process.env.MIN_RESERVE_CBETH || "",
-            DAI: process.env.MIN_RESERVE_DAI || "",
-            USDbC: process.env.MIN_RESERVE_USDBC || "",
-            cbBTC: process.env.MIN_RESERVE_CBBTC || "",
-        } as Record<string, string>,
+        minReserveBySymbol: {} as Record<string, string>,
     },
 
     // Relayer
@@ -264,7 +370,7 @@ export const config = {
     // Scanner Settings
     scanner: {
         intervalMs: parseInt(process.env.SCAN_INTERVAL_MS || "5000"),
-        minProfitUsd: parseFloat(process.env.MIN_PROFIT_USD || "1.0"),
+        minProfitUsd: parseFloat(process.env.MIN_PROFIT_USD || "0.1"),
         profitBufferUsd: parseFloat(process.env.PROFIT_BUFFER_USD || "0.25"),
         maxGasPriceGwei: parseInt(process.env.MAX_GAS_PRICE_GWEI || "50"),
         defaultSlippageBps: 50, // 0.5%

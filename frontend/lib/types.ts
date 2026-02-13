@@ -198,14 +198,14 @@ export type AnalyticsResponse = {
       uniV3: null | { liquidity: string; fee: number; tick: number };
       pancakeV3: null | { liquidity: string; fee: number; tick: number };
       aerodrome:
-        | null
-        | {
-            reserve0: string;
-            reserve1: string;
-            stable: boolean;
-            reserve0Human: string | null;
-            reserve1Human: string | null;
-          };
+      | null
+      | {
+        reserve0: string;
+        reserve1: string;
+        stable: boolean;
+        reserve0Human: string | null;
+        reserve1Human: string | null;
+      };
       lastUpdated: number;
     }>;
   };
@@ -236,4 +236,7 @@ export type ExecutionIntent = {
   refundRecipient: `0x${string}`;
   maxGasRefund: bigint;
   nonce: bigint;
+};
+export type PairsResponse = {
+  pairs: Array<{ name: string; source: "static" | "dynamic" }>;
 };
