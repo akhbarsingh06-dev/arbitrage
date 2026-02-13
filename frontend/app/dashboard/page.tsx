@@ -95,6 +95,7 @@ export default function DashboardPage() {
           <p className="mt-1 text-sm text-muted">
             Public arbitrage execution rails that compress DEX pricing inefficiencies and charge a transparent 15% on-chain performance fee.
           </p>
+          <div className="mt-2 text-[10px] text-indigo-400 font-mono tracking-widest">PROD_VERSION_2026_DISCOVERY</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="pill">Wallet: {address ? shortHex(address) : "Not connected"}</span>
